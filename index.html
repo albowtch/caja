@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caja</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: auto;
+            display: flex;
+            gap: 20px;
+        }
+        .main-content {
+            flex-grow: 1;
+            min-width: 300px;
+        }
+        .sidebar-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 150px;
+            padding: 10px;
+            border-left: 1px solid #eee;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.red {
+            background-color: #dc3545;
+        }
+        button.red:hover {
+            background-color: #c82333;
+        }
+        button.green {
+            background-color: #28a745;
+        }
+        button.green:hover {
+            background-color: #218838;
+        }
+        button.info {
+            background-color: #17a2b8;
+        }
+        button.info:hover {
+            background-color: #138496;
+        }
+        #response {
+            margin-top: 25px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #response ul {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+        #response li {
+            background-color: #f8f9fa;
+            border: 1px solid #e2e6ea;
+            margin-bottom: 5px;
+            padding: 8px 12px;
+            border-radius: 3px;
+        }
+        .error-message {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-content">
+            <h1>Caja</h1>
+
+            <div class="form-group">
+                <label for="productoId">ID del producto:</label>
+                <input type="text" id="productoId" placeholder="ID del producto">
+            </div>
+
+            <div class="form-group">
+                <label for="cantidad">Cantidad:</label>
+                <input type="number" id="cantidad" value="1" min="1">
+            </div>
+
+            <h2>Respuesta del Servidor:</h2>
+            <div id="response">Esperando respuesta...</div>
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+
+        <div class="sidebar-buttons">
+            <button type="button" onclick="enviarPeticion('añadir')">Añadir</button>
+            <button type="button" onclick="enviarPeticion('modificar')">Modificar</button>
+            <button type="button" class="info" onclick="handleNewAction('internet')">Internet</button>
+            <button type="button" class="info" onclick="handleNewAction('pagos')">Pagos</button>
+            <button type="button" class="info" onclick="handleNewAction('reportes')">Reportes</button>
+            <button type="button" class="info" onclick="enviarPeticion('ver')">Ver Carrito</button>
+            <button type="button" class="red" onclick="enviarPeticion('vaciar')">Vaciar Carrito</button>
+            <button type="button" class="green" onclick="enviarPeticion('finalizar')">Finalizar Compra</button>
+        </div>
+    </div>
+
+    <script>
+        // *** REEMPLAZA ESTA URL CON LA URL REAL DE TU WEBHOOK DE N8N ***
+        const WEBHOOK_URL = 'https://n8n.albored.com/webhook/carrito'; 
+        // URLS para los nuevos flujos (ajusta si las tienes definidas)
+        const INTERNET_WEBHOOK_URL = 'https://n8n.albored.com/form/car'; // Reemplazar
+        const PAGOS_WEBHOOK_URL = 'https://n8n.albored.com/webhook/pagos';     // Reemplazar
+        const REPORTES_WEBHOOK_URL = 'https://n8n.albored.com/webhook/rep'; // Reemplazar
+
+        // Get references to input fields (global scope in script)
+        const productoIdInput = document.getElementById('productoId');
+        const cantidadInput = document.getElementById('cantidad');
+        const responseDiv = document.getElementById('response');
+        const errorMessageDiv = document.getElementById('errorMessage');
+
+        // Helper function to reset fields and set focus
+        function resetAndFocusInput() {
+            productoIdInput.value = '';
+            cantidadInput.value = '1'; // Reset quantity to default 1
+            productoIdInput.focus();
+        }
+
+        async function enviarPeticion(intencion) {
+            console.log('1. Función enviarPeticion iniciada con intención:', intencion); // DEPURACIÓN
+            const productoId = productoIdInput.value.trim();
+            const cantidad = cantidadInput.value.trim();
+
+            errorMessageDiv.textContent = '';
+            responseDiv.textContent = 'Enviando petición...';
+
+            let message = intencion;
+
+            // Añadir ID y Cantidad solo si la intención lo requiere
+            if (intencion === 'añadir' || intencion === 'modificar') {
+                if (!productoId) {
+                    errorMessageDiv.textContent = 'El ID del producto es requerido para esta acción.';
+                    responseDiv.innerHTML = '<p style="color: red;">Error: ID de producto no proporcionado.</p>';
+                    productoIdInput.focus(); // Mantener el foco para que el usuario corrija
+                    console.log('2. Validación falló: ID de producto no proporcionado.'); // DEPURACIÓN
+                    return;
+                }
+                if (!cantidad || isNaN(Number(cantidad)) || Number(cantidad) <= 0) {
+                    errorMessageDiv.textContent = 'La cantidad debe ser un número positivo.';
+                    responseDiv.innerHTML = '<p style="color: red;">Error: Cantidad inválida.</p>';
+                    cantidadInput.focus(); // Mantener el foco para que el usuario corrije
+                    console.log('3. Validación falló: Cantidad inválida.'); // DEPURACIÓN
+                    return;
+                }
+                message += ` ${productoId} ${cantidad}`;
+            }
+
+            const data = { message: message };
+            console.log('4. Datos a enviar:', data); // DEPURACIÓN
+            console.log('5. Intentando fetch a URL:', WEBHOOK_URL); // DEPURACIÓN
+
+            try {
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
+                });
+                console.log('6. Fetch completado, objeto de respuesta recibido:', response); // DEPURACIÓN
+
+                // Intenta clonar la respuesta para poder leerla dos veces si fuera necesario
+                const clonedResponse = response.clone();
+
+                // Intenta leer el texto de la respuesta primero para ver si es un JSON válido
+                const responseText = await clonedResponse.text();
+                console.log('7. Texto crudo de la respuesta:', responseText); // DEPURACIÓN
+
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                    console.log('8. JSON de respuesta parseado:', result); // DEPURACIÓN
+                } catch (e) {
+                    console.error('9. Error al parsear JSON de respuesta:', e); // DEPURACIÓN
+                    responseDiv.innerHTML = `<p style="color: red;">Error: La respuesta del servidor no es un JSON válido.</p><pre>${responseText}</pre>`;
+                    errorMessageDiv.textContent = 'El servidor respondió, pero el formato JSON es incorrecto.';
+                    resetAndFocusInput();
+                    return;
+                }
+                
+                let displayHtml = '';
+                let cartData = [];
+
+                // Intentar parsear currentCart si es una cadena (viene así de algunos nodos n8n)
+                if (typeof result.currentCart === 'string') {
+                    try {
+                        cartData = JSON.parse(result.currentCart);
+                    } catch (e) {
+                        console.warn('Advertencia: No se pudo parsear currentCart como JSON:', result.currentCart, e);
+                        cartData = []; // Si falla el parseo, se asume carrito vacío o error
+                    }
+                } else if (Array.isArray(result.currentCart)) {
+                    // Si ya es un array (viene así de otros nodos n8n, como vaciar, finalizar)
+                    cartData = result.currentCart;
+                }
+
+                // Mostrar el mensaje principal de la respuesta de n8n
+                if (result.text) {
+                    displayHtml += `<p><strong>${result.text}</strong></p>`;
+                }
+
+                if (result.type === 'success' || result.type === 'info') {
+                    if (cartData && cartData.length > 0) {
+                        displayHtml += '<h3>Detalles del Carrito:</h3>';
+                        displayHtml += '<ul>';
+                        cartData.forEach(item => {
+                            displayHtml += `<li>ID: <strong>${item.id}</strong>, -- ${item.productCode || 'N/A'}, Cantidad: ${item.quantity}, Precio: $${(item.price || 0).toFixed(2)}, Total: $${(item.total || 0).toFixed(2)}</li>`;
+                        });
+                        displayHtml += '</ul>';
+                        if (result.cartTotal !== undefined) {
+                             displayHtml += `<h3>Total General: $${(result.cartTotal || 0).toFixed(2)}</h3>`;
+                        }
+                    } else if (intencion === 'ver') { // Si se intentó "ver" y el carrito está vacío
+                        displayHtml += '<p>El carrito está vacío.</p>';
+                    }
+                    // Para vaciar/finalizar, el mensaje de texto principal ya es descriptivo.
+                    // Si hay un total (será 0), también se muestra.
+                    if ((intencion === 'vaciar' || intencion === 'finalizar') && result.cartTotal !== undefined) {
+                        displayHtml += `<p>Total General: $${(result.cartTotal || 0).toFixed(2)}</p>`;
+                    }
+
+                } else if (result.type === 'error') {
+                    displayHtml = `<p style="color: red; font-weight: bold;">Error: ${result.text || 'Ha ocurrido un error inesperado.'}</p>`;
+                    // Si un error devuelve también datos del carrito, mostrarlos
+                    if (cartData && cartData.length > 0) {
+                        displayHtml += '<h3>Contenido actual del Carrito (sin cambios):</h3>';
+                        displayHtml += '<ul>';
+                        cartData.forEach(item => {
+                            displayHtml += `<li>ID: <strong>${item.id}</strong>, Producto: ${item.productCode || 'N/A'}, Cantidad: ${item.quantity}, Precio Unitario: $${(item.price || 0).toFixed(2)}, Total Ítem: $${(item.total || 0).toFixed(2)}</li>`;
+                        });
+                        displayHtml += '</ul>';
+                        if (result.cartTotal !== undefined) {
+                            displayHtml += `<p>Total General: $${(result.cartTotal || 0).toFixed(2)}</p>`;
+                        }
+                    }
+                } else {
+                    // Fallback para cualquier respuesta inesperada (mostrar el JSON completo)
+                    displayHtml = '<p>Respuesta desconocida:</p><pre>' + JSON.stringify(result, null, 2) + '</pre>';
+                }
+
+                responseDiv.innerHTML = displayHtml;
+
+                // Reset y enfocar solo si la operación de añadir/modificar fue exitosa
+                if ((intencion === 'añadir' || intencion === 'modificar') && (result.type === 'success' || result.type === 'info')) {
+                    resetAndFocusInput();
+                }
+
+            } catch (error) {
+                console.error('10. Error FINAL en la petición fetch o al procesar la respuesta:', error); // DEPURACIÓN
+                responseDiv.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
+                errorMessageDiv.textContent = 'No se pudo conectar con el webhook. Asegúrate de que la URL es correcta y el flujo de n8n está activo.';
+                // En caso de error de conexión, también reseteamos para una nueva oportunidad
+                resetAndFocusInput();
+            }
+        }
+
+        // Función para los nuevos botones (Internet, Pagos, Reportes)
+        async function handleNewAction(actionType) {
+            const responseDiv = document.getElementById('response');
+            const errorMessageDiv = document.getElementById('errorMessage');
+            errorMessageDiv.textContent = '';
+            responseDiv.textContent = `Preparando acción: ${actionType}...`;
+
+            let webhookUrlToCall = '';
+            let messageToSend = { action: actionType };
+
+            switch (actionType) {
+                case 'internet':
+                	window.open(INTERNET_WEBHOOK_URL, '_blank')
+                    return;
+                    break;
+                case 'pagos':
+                	window.open(PAGOS_WEBHOOK_URL, '_blank')
+                    return;
+                    break;
+                case 'reportes':
+                	window.open(REPORTES_WEBHOOK_URL, '_blank')
+                    return;
+                    break;
+                default:
+                    responseDiv.innerHTML = '<p style="color: red;">Acción no reconocida.</p>';
+                    return;
+            }
+
+            if (webhookUrlToCall.includes('YOUR_') || !webhookUrlToCall) {
+                responseDiv.innerHTML = `<p style="color: orange;"><strong>Webhook para "${actionType}" no configurado.</strong> Reemplaza 'YOUR_${actionType.toUpperCase()}_N8N_WEBHOOK_URL_HERE' en el código HTML.</p>`;
+                return;
+            }
+
+            try {
+                responseDiv.innerHTML = `<p>Botón "${actionType}" presionado.</p><p>Listo para integrar con un flujo de n8n específico para ${actionType}.</p><p>URL del Webhook (por configurar): ${webhookUrlToCall}</p>`;
+                console.log(`Acción '${actionType}' disparada. Mensaje a enviar:`, messageToSend);
+
+                // --- DESCOMENTAR PARA LLAMAR AL WEBHOOK REAL UNA VEZ CONFIGURADO ---
+                /*
+                const response = await fetch(webhookUrlToCall, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(messageToSend),
+                });
+                const result = await response.json();
+                responseDiv.innerHTML = `<p><strong>Respuesta de ${actionType}:</strong></p><pre>${JSON.stringify(result, null, 2)}</pre>`;
+                */
+
+            } catch (error) {
+                console.error(`Error al enviar la petición para ${actionType}:`, error);
+                responseDiv.innerHTML = `<p style="color: red;">Error de conexión para ${actionType}: ${error.message}</p>`;
+                errorMessageDiv.textContent = `No se pudo conectar con el webhook de ${actionType}.`;
+            }
+        }
+
+        // Add event listeners for Enter key
+        productoIdInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Evita el comportamiento predeterminado del Enter (ej. envío de formulario)
+                enviarPeticion('añadir');
+            }
+        });
+
+        cantidadInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Evita el comportamiento predeterminado del Enter
+                enviarPeticion('añadir');
+            }
+        });
+
+        // Initialize focus when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            productoIdInput.focus();
+        });
+    </script>
+</body>
+</html>
