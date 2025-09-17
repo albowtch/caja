@@ -138,30 +138,40 @@
         </div>
 
         <div class="sidebar-buttons">
-            <button type="button" onclick="enviarPeticion('añadir')">Añadir</button>
-            <button type="button" onclick="enviarPeticion('modificar')">Modificar</button>
-            <button type="button" class="info" onclick="handleNewAction('internet')">Internet</button>
-            <button type="button" class="info" onclick="handleNewAction('pagos')">Pagos</button>
-            <button type="button" class="info" onclick="handleNewAction('reportes')">Reportes</button>
-            <button type="button" class="info" onclick="enviarPeticion('ver')">Ver Carrito</button>
-            <button type="button" class="red" onclick="enviarPeticion('vaciar')">Vaciar Carrito</button>
-            <button type="button" class="green" onclick="enviarPeticion('finalizar')">Finalizar Compra</button>
+            <button type="button" id="btnAnadir">Añadir</button>
+            <button type="button" id="btnModificar">Modificar</button>
+            <button type="button" class="info" id="btnInternet">Internet</button>
+            <button type="button" class="info" id="btnPagos">Pagos</button>
+            <button type="button" class="info" id="btnReportes">Reportes</button>
+            <button type="button" class="info" id="btnVerCarrito">Ver Carrito</button>
+            <button type="button" class="red" id="btnVaciarCarrito">Vaciar Carrito</button>
+            <button type="button" class="green" id="btnFinalizarCompra">Finalizar Compra</button>
         </div>
     </div>
 
     <script>
         // *** REEMPLAZA ESTA URL CON LA URL REAL DE TU WEBHOOK DE N8N ***
-        const WEBHOOK_URL = 'https://n8n.albored.com/webhook/carrito'; 
+        const WEBHOOK_URL = 'https://n8n.albored.com/webhook/carrit2'; 
         // URLS para los nuevos flujos (ajusta si las tienes definidas)
         const INTERNET_WEBHOOK_URL = 'https://n8n.albored.com/form/car'; // Reemplazar
         const PAGOS_WEBHOOK_URL = 'https://n8n.albored.com/form/$$';     // Reemplazar
-        const REPORTES_WEBHOOK_URL = 'https://n8n.albored.com/form/rep'; // Reemplazar
+        const REPORTES_WEBHOOK_URL = 'https://n8n.albored.com/webhook/rep'; // Reemplazar
 
-        // Get references to input fields (global scope in script)
+        // Get references to input fields
         const productoIdInput = document.getElementById('productoId');
         const cantidadInput = document.getElementById('cantidad');
         const responseDiv = document.getElementById('response');
         const errorMessageDiv = document.getElementById('errorMessage');
+
+        // Get references to buttons
+        const btnAnadir = document.getElementById('btnAnadir');
+        const btnModificar = document.getElementById('btnModificar');
+        const btnInternet = document.getElementById('btnInternet');
+        const btnPagos = document.getElementById('btnPagos');
+        const btnReportes = document.getElementById('btnReportes');
+        const btnVerCarrito = document.getElementById('btnVerCarrito');
+        const btnVaciarCarrito = document.getElementById('btnVaciarCarrito');
+        const btnFinalizarCompra = document.getElementById('btnFinalizarCompra');
 
         // Helper function to reset fields and set focus
         function resetAndFocusInput() {
@@ -185,14 +195,14 @@
                 if (!productoId) {
                     errorMessageDiv.textContent = 'El ID del producto es requerido para esta acción.';
                     responseDiv.innerHTML = '<p style="color: red;">Error: ID de producto no proporcionado.</p>';
-                    productoIdInput.focus(); // Mantener el foco para que el usuario corrija
+                    productoIdInput.focus();
                     console.log('2. Validación falló: ID de producto no proporcionado.'); // DEPURACIÓN
                     return;
                 }
                 if (!cantidad || isNaN(Number(cantidad)) || Number(cantidad) <= 0) {
                     errorMessageDiv.textContent = 'La cantidad debe ser un número positivo.';
                     responseDiv.innerHTML = '<p style="color: red;">Error: Cantidad inválida.</p>';
-                    cantidadInput.focus(); // Mantener el foco para que el usuario corrije
+                    cantidadInput.focus();
                     console.log('3. Validación falló: Cantidad inválida.'); // DEPURACIÓN
                     return;
                 }
@@ -213,10 +223,7 @@
                 });
                 console.log('6. Fetch completado, objeto de respuesta recibido:', response); // DEPURACIÓN
 
-                // Intenta clonar la respuesta para poder leerla dos veces si fuera necesario
                 const clonedResponse = response.clone();
-
-                // Intenta leer el texto de la respuesta primero para ver si es un JSON válido
                 const responseText = await clonedResponse.text();
                 console.log('7. Texto crudo de la respuesta:', responseText); // DEPURACIÓN
 
@@ -235,16 +242,16 @@
                 let displayHtml = '';
                 let cartData = [];
 
-                // Intentar parsear currentCart si es una cadena (viene así de algunos nodos n8n)
+                // Intentar parsear currentCart si es una cadena (como venía en tu consola)
                 if (typeof result.currentCart === 'string') {
                     try {
-                        cartData = JSON.parse(result.currentCart);
+                        cartData = JSON.parse(result.currentCart); // Esto lo convierte de la cadena JSON a un Array de Strings
                     } catch (e) {
                         console.warn('Advertencia: No se pudo parsear currentCart como JSON:', result.currentCart, e);
                         cartData = []; // Si falla el parseo, se asume carrito vacío o error
                     }
                 } else if (Array.isArray(result.currentCart)) {
-                    // Si ya es un array (viene así de otros nodos n8n, como vaciar, finalizar)
+                    // Si n8n ya lo manda como Array directamente (ideal y esperado con la última configuración de n8n)
                     cartData = result.currentCart;
                 }
 
@@ -258,7 +265,8 @@
                         displayHtml += '<h3>Detalles del Carrito:</h3>';
                         displayHtml += '<ul>';
                         cartData.forEach(item => {
-                            displayHtml += `<li>ID: <strong>${item.id}</strong>, -- ${item.productCode || 'N/A'}, Cantidad: ${item.quantity}, Precio: $${(item.price || 0).toFixed(2)}, Total: $${(item.total || 0).toFixed(2)}</li>`;
+                            // --- LÍNEA MODIFICADA: 'item' es ahora la cadena formateada directamente ---
+                            displayHtml += `<li>${item}</li>`;
                         });
                         displayHtml += '</ul>';
                         if (result.cartTotal !== undefined) {
@@ -267,20 +275,18 @@
                     } else if (intencion === 'ver') { // Si se intentó "ver" y el carrito está vacío
                         displayHtml += '<p>El carrito está vacío.</p>';
                     }
-                    // Para vaciar/finalizar, el mensaje de texto principal ya es descriptivo.
-                    // Si hay un total (será 0), también se muestra.
                     if ((intencion === 'vaciar' || intencion === 'finalizar') && result.cartTotal !== undefined) {
                         displayHtml += `<p>Total General: $${(result.cartTotal || 0).toFixed(2)}</p>`;
                     }
 
                 } else if (result.type === 'error') {
                     displayHtml = `<p style="color: red; font-weight: bold;">Error: ${result.text || 'Ha ocurrido un error inesperado.'}</p>`;
-                    // Si un error devuelve también datos del carrito, mostrarlos
                     if (cartData && cartData.length > 0) {
                         displayHtml += '<h3>Contenido actual del Carrito (sin cambios):</h3>';
                         displayHtml += '<ul>';
                         cartData.forEach(item => {
-                            displayHtml += `<li>ID: <strong>${item.id}</strong>, Producto: ${item.productCode || 'N/A'}, Cantidad: ${item.quantity}, Precio Unitario: $${(item.price || 0).toFixed(2)}, Total Ítem: $${(item.total || 0).toFixed(2)}</li>`;
+                            // --- LÍNEA MODIFICADA: 'item' es ahora la cadena formateada directamente ---
+                            displayHtml += `<li>${item}</li>`;
                         });
                         displayHtml += '</ul>';
                         if (result.cartTotal !== undefined) {
@@ -288,13 +294,11 @@
                         }
                     }
                 } else {
-                    // Fallback para cualquier respuesta inesperada (mostrar el JSON completo)
                     displayHtml = '<p>Respuesta desconocida:</p><pre>' + JSON.stringify(result, null, 2) + '</pre>';
                 }
 
                 responseDiv.innerHTML = displayHtml;
 
-                // Reset y enfocar solo si la operación de añadir/modificar fue exitosa
                 if ((intencion === 'añadir' || intencion === 'modificar') && (result.type === 'success' || result.type === 'info')) {
                     resetAndFocusInput();
                 }
@@ -303,7 +307,6 @@
                 console.error('10. Error FINAL en la petición fetch o al procesar la respuesta:', error); // DEPURACIÓN
                 responseDiv.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
                 errorMessageDiv.textContent = 'No se pudo conectar con el webhook. Asegúrate de que la URL es correcta y el flujo de n8n está activo.';
-                // En caso de error de conexión, también reseteamos para una nueva oportunidad
                 resetAndFocusInput();
             }
         }
@@ -322,15 +325,15 @@
                 case 'internet':
                 	window.open(INTERNET_WEBHOOK_URL, '_blank')
                     return;
-                    break;
+                    // No break here as we return
                 case 'pagos':
                 	window.open(PAGOS_WEBHOOK_URL, '_blank')
                     return;
-                    break;
+                    // No break here as we return
                 case 'reportes':
                 	window.open(REPORTES_WEBHOOK_URL, '_blank')
                     return;
-                    break;
+                    // No break here as we return
                 default:
                     responseDiv.innerHTML = '<p style="color: red;">Acción no reconocida.</p>';
                     return;
@@ -368,22 +371,34 @@
         // Add event listeners for Enter key
         productoIdInput.addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
-                event.preventDefault(); // Evita el comportamiento predeterminado del Enter (ej. envío de formulario)
+                event.preventDefault();
                 enviarPeticion('añadir');
             }
         });
 
         cantidadInput.addEventListener('keydown', function(event) {
             if (event.key === 'Enter') {
-                event.preventDefault(); // Evita el comportamiento predeterminado del Enter
+                event.preventDefault();
                 enviarPeticion('añadir');
             }
         });
 
-        // Initialize focus when the page loads
+        // Add event listeners for the buttons once the DOM is fully loaded
         document.addEventListener('DOMContentLoaded', () => {
-            productoIdInput.focus();
+            productoIdInput.focus(); // Keep initial focus
+
+            btnAnadir.addEventListener('click', () => enviarPeticion('añadir'));
+            btnModificar.addEventListener('click', () => enviarPeticion('modificar'));
+            btnVerCarrito.addEventListener('click', () => enviarPeticion('ver'));
+            btnVaciarCarrito.addEventListener('click', () => enviarPeticion('vaciar'));
+            btnFinalizarCompra.addEventListener('click', () => enviarPeticion('finalizar'));
+
+            // For the new actions that open new windows (handleNewAction)
+            btnInternet.addEventListener('click', () => handleNewAction('internet'));
+            btnPagos.addEventListener('click', () => handleNewAction('pagos'));
+            btnReportes.addEventListener('click', () => handleNewAction('reportes'));
         });
+
     </script>
 </body>
 </html>
