@@ -21,6 +21,14 @@
             display: flex;
             gap: 20px;
         }
+        .login-container {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            margin: 100px auto;
+        }
         .main-content {
             flex-grow: 1;
             min-width: 300px;
@@ -32,6 +40,15 @@
             min-width: 150px;
             padding: 10px;
             border-left: 1px solid #eee;
+        }
+        .user-info {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         h1 {
             color: #0056b3;
@@ -47,6 +64,7 @@
             font-weight: bold;
         }
         input[type="text"],
+        input[type="password"],
         input[type="number"] {
             width: calc(100% - 22px);
             padding: 10px;
@@ -86,6 +104,15 @@
         button.info:hover {
             background-color: #138496;
         }
+        button.logout {
+            background-color: #6c757d;
+            padding: 5px 10px;
+            font-size: 12px;
+            width: auto;
+        }
+        button.logout:hover {
+            background-color: #545b62;
+        }
         #response {
             margin-top: 25px;
             padding: 15px;
@@ -115,11 +142,35 @@
             font-weight: bold;
             margin-top: 10px;
         }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Pantalla de Login -->
+    <div id="loginScreen" class="login-container">
+        <h1>Iniciar Sesión</h1>
+        <div class="form-group">
+            <label for="loginUsername">Usuario:</label>
+            <input type="text" id="loginUsername" placeholder="Ingresa tu usuario">
+        </div>
+        <div class="form-group">
+            <label for="loginPassword">Contraseña:</label>
+            <input type="password" id="loginPassword" placeholder="Ingresa tu contraseña">
+        </div>
+        <button id="btnLogin">Iniciar Sesión</button>
+        <div id="loginError" class="error-message"></div>
+    </div>
+
+    <!-- Pantalla Principal (oculta inicialmente) -->
+    <div id="mainScreen" class="container hidden">
         <div class="main-content">
+            <div class="user-info">
+                <span>Usuario: <strong id="currentUser"></strong></span>
+                <button class="logout" id="btnLogout">Cerrar Sesión</button>
+            </div>
+
             <h1>Caja</h1>
 
             <div class="form-group">
@@ -150,38 +201,137 @@
     </div>
 
     <script>
-        // *** REEMPLAZA ESTA URL CON LA URL REAL DE TU WEBHOOK DE N8N ***
-        const WEBHOOK_URL = 'https://n8n.albored.com/webhook/carrit2'; 
-        // URLS para los nuevos flujos (ajusta si las tienes definidas)
-        const INTERNET_WEBHOOK_URL = 'https://n8n.albored.com/form/car'; // Reemplazar
-        const PAGOS_WEBHOOK_URL = 'https://n8n.albored.com/form/$$';     // Reemplazar
-        const REPORTES_WEBHOOK_URL = 'https://n8n.albored.com/webhook/rep'; // Reemplazar
+        // URLs de webhooks
+        const LOGIN_WEBHOOK_URL = 'https://n8n.albored.com/webhook/login';
+        const WEBHOOK_URL = 'https://n8n.albored.com/webhook/carrit2';
+        const INTERNET_WEBHOOK_URL = 'https://n8n.albored.com/form/car';
+        const PAGOS_WEBHOOK_URL = 'https://n8n.albored.com/form/$$';
+        const REPORTES_WEBHOOK_URL = 'https://n8n.albored.com/webhook/rep';
 
-        // Get references to input fields
+        // Variables globales de sesión
+        let currentSession = null;
+
+        // Referencias a elementos
+        const loginScreen = document.getElementById('loginScreen');
+        const mainScreen = document.getElementById('mainScreen');
+        const loginUsername = document.getElementById('loginUsername');
+        const loginPassword = document.getElementById('loginPassword');
+        const btnLogin = document.getElementById('btnLogin');
+        const btnLogout = document.getElementById('btnLogout');
+        const currentUser = document.getElementById('currentUser');
+        const loginError = document.getElementById('loginError');
+
+        // Elementos de la caja
         const productoIdInput = document.getElementById('productoId');
         const cantidadInput = document.getElementById('cantidad');
         const responseDiv = document.getElementById('response');
         const errorMessageDiv = document.getElementById('errorMessage');
 
-        // Get references to buttons
-        const btnAnadir = document.getElementById('btnAnadir');
-        const btnModificar = document.getElementById('btnModificar');
-        const btnInternet = document.getElementById('btnInternet');
-        const btnPagos = document.getElementById('btnPagos');
-        const btnReportes = document.getElementById('btnReportes');
-        const btnVerCarrito = document.getElementById('btnVerCarrito');
-        const btnVaciarCarrito = document.getElementById('btnVaciarCarrito');
-        const btnFinalizarCompra = document.getElementById('btnFinalizarCompra');
+        // Función de login
+        async function login() {
+            const username = loginUsername.value.trim();
+            const password = loginPassword.value.trim();
 
-        // Helper function to reset fields and set focus
-        function resetAndFocusInput() {
-            productoIdInput.value = '';
-            cantidadInput.value = '1'; // Reset quantity to default 1
+            if (!username || !password) {
+                loginError.textContent = 'Usuario y contraseña son requeridos';
+                return;
+            }
+
+            loginError.textContent = '';
+            btnLogin.textContent = 'Iniciando...';
+            btnLogin.disabled = true;
+
+            try {
+                const response = await fetch(LOGIN_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Guardar sesión
+                    currentSession = {
+                        user_id: result.user_id,
+                        username: result.username,
+                        token: result.token
+                    };
+                    localStorage.setItem('cajaSession', JSON.stringify(currentSession));
+
+                    // Mostrar pantalla principal
+                    showMainScreen();
+                } else {
+                    loginError.textContent = result.message || 'Error de login';
+                }
+            } catch (error) {
+                loginError.textContent = 'Error de conexión';
+                console.error('Error de login:', error);
+            }
+
+            btnLogin.textContent = 'Iniciar Sesión';
+            btnLogin.disabled = false;
+        }
+
+        // Función de logout
+        function logout() {
+            currentSession = null;
+            localStorage.removeItem('cajaSession');
+            showLoginScreen();
+        }
+
+        // Mostrar pantalla de login
+        function showLoginScreen() {
+            loginScreen.classList.remove('hidden');
+            mainScreen.classList.add('hidden');
+            loginUsername.value = '';
+            loginPassword.value = '';
+            loginError.textContent = '';
+            loginUsername.focus();
+        }
+
+        // Mostrar pantalla principal
+        function showMainScreen() {
+            loginScreen.classList.add('hidden');
+            mainScreen.classList.remove('hidden');
+            currentUser.textContent = currentSession.username;
             productoIdInput.focus();
         }
 
+        // Verificar sesión al cargar
+        function checkSession() {
+            const savedSession = localStorage.getItem('cajaSession');
+            if (savedSession) {
+                try {
+                    currentSession = JSON.parse(savedSession);
+                    showMainScreen();
+                } catch (error) {
+                    showLoginScreen();
+                }
+            } else {
+                showLoginScreen();
+            }
+        }
+
+        // Función para resetear campos
+        function resetAndFocusInput() {
+            productoIdInput.value = '';
+            cantidadInput.value = '1';
+            productoIdInput.focus();
+        }
+
+        // Función principal para enviar peticiones (modificada para incluir usuario)
         async function enviarPeticion(intencion) {
-            console.log('1. Función enviarPeticion iniciada con intención:', intencion); // DEPURACIÓN
+            if (!currentSession) {
+                logout();
+                return;
+            }
+
             const productoId = productoIdInput.value.trim();
             const cantidad = cantidadInput.value.trim();
 
@@ -190,28 +340,27 @@
 
             let message = intencion;
 
-            // Añadir ID y Cantidad solo si la intención lo requiere
             if (intencion === 'añadir' || intencion === 'modificar') {
                 if (!productoId) {
                     errorMessageDiv.textContent = 'El ID del producto es requerido para esta acción.';
                     responseDiv.innerHTML = '<p style="color: red;">Error: ID de producto no proporcionado.</p>';
                     productoIdInput.focus();
-                    console.log('2. Validación falló: ID de producto no proporcionado.'); // DEPURACIÓN
                     return;
                 }
                 if (!cantidad || isNaN(Number(cantidad)) || Number(cantidad) <= 0) {
                     errorMessageDiv.textContent = 'La cantidad debe ser un número positivo.';
                     responseDiv.innerHTML = '<p style="color: red;">Error: Cantidad inválida.</p>';
                     cantidadInput.focus();
-                    console.log('3. Validación falló: Cantidad inválida.'); // DEPURACIÓN
                     return;
                 }
                 message += ` ${productoId} ${cantidad}`;
             }
 
-            const data = { message: message };
-            console.log('4. Datos a enviar:', data); // DEPURACIÓN
-            console.log('5. Intentando fetch a URL:', WEBHOOK_URL); // DEPURACIÓN
+            const data = { 
+                message: message,
+                user_id: currentSession.user_id,
+                username: currentSession.username
+            };
 
             try {
                 const response = await fetch(WEBHOOK_URL, {
@@ -221,41 +370,22 @@
                     },
                     body: JSON.stringify(data),
                 });
-                console.log('6. Fetch completado, objeto de respuesta recibido:', response); // DEPURACIÓN
 
-                const clonedResponse = response.clone();
-                const responseText = await clonedResponse.text();
-                console.log('7. Texto crudo de la respuesta:', responseText); // DEPURACIÓN
-
-                let result;
-                try {
-                    result = JSON.parse(responseText);
-                    console.log('8. JSON de respuesta parseado:', result); // DEPURACIÓN
-                } catch (e) {
-                    console.error('9. Error al parsear JSON de respuesta:', e); // DEPURACIÓN
-                    responseDiv.innerHTML = `<p style="color: red;">Error: La respuesta del servidor no es un JSON válido.</p><pre>${responseText}</pre>`;
-                    errorMessageDiv.textContent = 'El servidor respondió, pero el formato JSON es incorrecto.';
-                    resetAndFocusInput();
-                    return;
-                }
+                const result = await response.json();
                 
                 let displayHtml = '';
                 let cartData = [];
 
-                // Intentar parsear currentCart si es una cadena (como venía en tu consola)
                 if (typeof result.currentCart === 'string') {
                     try {
-                        cartData = JSON.parse(result.currentCart); // Esto lo convierte de la cadena JSON a un Array de Strings
+                        cartData = JSON.parse(result.currentCart);
                     } catch (e) {
-                        console.warn('Advertencia: No se pudo parsear currentCart como JSON:', result.currentCart, e);
-                        cartData = []; // Si falla el parseo, se asume carrito vacío o error
+                        cartData = [];
                     }
                 } else if (Array.isArray(result.currentCart)) {
-                    // Si n8n ya lo manda como Array directamente (ideal y esperado con la última configuración de n8n)
                     cartData = result.currentCart;
                 }
 
-                // Mostrar el mensaje principal de la respuesta de n8n
                 if (result.text) {
                     displayHtml += `<p><strong>${result.text}</strong></p>`;
                 }
@@ -265,14 +395,13 @@
                         displayHtml += '<h3>Detalles del Carrito:</h3>';
                         displayHtml += '<ul>';
                         cartData.forEach(item => {
-                            // --- LÍNEA MODIFICADA: 'item' es ahora la cadena formateada directamente ---
                             displayHtml += `<li>${item}</li>`;
                         });
                         displayHtml += '</ul>';
                         if (result.cartTotal !== undefined) {
                              displayHtml += `<h3>Total General: $${(result.cartTotal || 0).toFixed(2)}</h3>`;
                         }
-                    } else if (intencion === 'ver') { // Si se intentó "ver" y el carrito está vacío
+                    } else if (intencion === 'ver') {
                         displayHtml += '<p>El carrito está vacío.</p>';
                     }
                     if ((intencion === 'vaciar' || intencion === 'finalizar') && result.cartTotal !== undefined) {
@@ -285,7 +414,6 @@
                         displayHtml += '<h3>Contenido actual del Carrito (sin cambios):</h3>';
                         displayHtml += '<ul>';
                         cartData.forEach(item => {
-                            // --- LÍNEA MODIFICADA: 'item' es ahora la cadena formateada directamente ---
                             displayHtml += `<li>${item}</li>`;
                         });
                         displayHtml += '</ul>';
@@ -304,101 +432,73 @@
                 }
 
             } catch (error) {
-                console.error('10. Error FINAL en la petición fetch o al procesar la respuesta:', error); // DEPURACIÓN
                 responseDiv.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
-                errorMessageDiv.textContent = 'No se pudo conectar con el webhook. Asegúrate de que la URL es correcta y el flujo de n8n está activo.';
+                errorMessageDiv.textContent = 'No se pudo conectar con el webhook.';
                 resetAndFocusInput();
             }
         }
 
-        // Función para los nuevos botones (Internet, Pagos, Reportes)
+        // Función para nuevas acciones
         async function handleNewAction(actionType) {
-            const responseDiv = document.getElementById('response');
-            const errorMessageDiv = document.getElementById('errorMessage');
-            errorMessageDiv.textContent = '';
-            responseDiv.textContent = `Preparando acción: ${actionType}...`;
-
-            let webhookUrlToCall = '';
-            let messageToSend = { action: actionType };
-
-            switch (actionType) {
-                case 'internet':
-                	window.open(INTERNET_WEBHOOK_URL, '_blank')
-                    return;
-                    // No break here as we return
-                case 'pagos':
-                	window.open(PAGOS_WEBHOOK_URL, '_blank')
-                    return;
-                    // No break here as we return
-                case 'reportes':
-                	window.open(REPORTES_WEBHOOK_URL, '_blank')
-                    return;
-                    // No break here as we return
-                default:
-                    responseDiv.innerHTML = '<p style="color: red;">Acción no reconocida.</p>';
-                    return;
-            }
-
-            if (webhookUrlToCall.includes('YOUR_') || !webhookUrlToCall) {
-                responseDiv.innerHTML = `<p style="color: orange;"><strong>Webhook para "${actionType}" no configurado.</strong> Reemplaza 'YOUR_${actionType.toUpperCase()}_N8N_WEBHOOK_URL_HERE' en el código HTML.</p>`;
-                return;
-            }
-
-            try {
-                responseDiv.innerHTML = `<p>Botón "${actionType}" presionado.</p><p>Listo para integrar con un flujo de n8n específico para ${actionType}.</p><p>URL del Webhook (por configurar): ${webhookUrlToCall}</p>`;
-                console.log(`Acción '${actionType}' disparada. Mensaje a enviar:`, messageToSend);
-
-                // --- DESCOMENTAR PARA LLAMAR AL WEBHOOK REAL UNA VEZ CONFIGURADO ---
-                /*
-                const response = await fetch(webhookUrlToCall, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(messageToSend),
-                });
-                const result = await response.json();
-                responseDiv.innerHTML = `<p><strong>Respuesta de ${actionType}:</strong></p><pre>${JSON.stringify(result, null, 2)}</pre>`;
-                */
-
-            } catch (error) {
-                console.error(`Error al enviar la petición para ${actionType}:`, error);
-                responseDiv.innerHTML = `<p style="color: red;">Error de conexión para ${actionType}: ${error.message}</p>`;
-                errorMessageDiv.textContent = `No se pudo conectar con el webhook de ${actionType}.`;
+            const urls = {
+                'internet': INTERNET_WEBHOOK_URL,
+                'pagos': PAGOS_WEBHOOK_URL,
+                'reportes': REPORTES_WEBHOOK_URL
+            };
+            
+            if (urls[actionType]) {
+                window.open(urls[actionType], '_blank');
             }
         }
 
-        // Add event listeners for Enter key
-        productoIdInput.addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                enviarPeticion('añadir');
-            }
-        });
-
-        cantidadInput.addEventListener('keydown', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                enviarPeticion('añadir');
-            }
-        });
-
-        // Add event listeners for the buttons once the DOM is fully loaded
+        // Event listeners
         document.addEventListener('DOMContentLoaded', () => {
-            productoIdInput.focus(); // Keep initial focus
+            checkSession();
 
-            btnAnadir.addEventListener('click', () => enviarPeticion('añadir'));
-            btnModificar.addEventListener('click', () => enviarPeticion('modificar'));
-            btnVerCarrito.addEventListener('click', () => enviarPeticion('ver'));
-            btnVaciarCarrito.addEventListener('click', () => enviarPeticion('vaciar'));
-            btnFinalizarCompra.addEventListener('click', () => enviarPeticion('finalizar'));
+            // Login events
+            btnLogin.addEventListener('click', login);
+            btnLogout.addEventListener('click', logout);
 
-            // For the new actions that open new windows (handleNewAction)
-            btnInternet.addEventListener('click', () => handleNewAction('internet'));
-            btnPagos.addEventListener('click', () => handleNewAction('pagos'));
-            btnReportes.addEventListener('click', () => handleNewAction('reportes'));
+            loginUsername.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    loginPassword.focus();
+                }
+            });
+
+            loginPassword.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    login();
+                }
+            });
+
+            // Main screen events
+            productoIdInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    enviarPeticion('añadir');
+                }
+            });
+
+            cantidadInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    enviarPeticion('añadir');
+                }
+            });
+
+            // Button events
+            document.getElementById('btnAnadir').addEventListener('click', () => enviarPeticion('añadir'));
+            document.getElementById('btnModificar').addEventListener('click', () => enviarPeticion('modificar'));
+            document.getElementById('btnVerCarrito').addEventListener('click', () => enviarPeticion('ver'));
+            document.getElementById('btnVaciarCarrito').addEventListener('click', () => enviarPeticion('vaciar'));
+            document.getElementById('btnFinalizarCompra').addEventListener('click', () => enviarPeticion('finalizar'));
+
+            document.getElementById('btnInternet').addEventListener('click', () => handleNewAction('internet'));
+            document.getElementById('btnPagos').addEventListener('click', () => handleNewAction('pagos'));
+            document.getElementById('btnReportes').addEventListener('click', () => handleNewAction('reportes'));
         });
-
     </script>
 </body>
 </html>
