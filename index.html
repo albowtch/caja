@@ -207,6 +207,7 @@
         const INTERNET_WEBHOOK_URL = 'https://n8n.albored.com/form/car';
         const PAGOS_WEBHOOK_URL = 'https://n8n.albored.com/form/$$';
         const REPORTES_WEBHOOK_URL = 'https://n8n.albored.com/webhook/rep';
+        const CORTE_WEBHOOK_URL = 'https://n8n.albored.com/webhook/corte-caja';
 
         // Variables globales de sesión
         let currentSession = null;
@@ -256,11 +257,15 @@
                 const result = await response.json();
 
                 if (result.success) {
+                    // Generar session_id único
+                    const sessionId = `${result.user_id}_${Date.now()}`;
+                    
                     // Guardar sesión
                     currentSession = {
                         user_id: result.user_id,
                         username: result.username,
-                        token: result.token
+                        token: result.token,
+                        session_id: sessionId
                     };
                     localStorage.setItem('cajaSession', JSON.stringify(currentSession));
 
@@ -278,8 +283,30 @@
             btnLogin.disabled = false;
         }
 
-        // Función de logout
-        function logout() {
+        // Función de logout con corte automático
+        async function logout() {
+            if (currentSession) {
+                try {
+                    // Realizar corte de caja automático
+                    const today = new Date().toISOString().split('T')[0];
+                    await fetch(CORTE_WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            user_id: currentSession.user_id,
+                            username: currentSession.username,
+                            fecha: today,
+                            session_id: currentSession.session_id,
+                            action: 'corte_automatico'
+                        }),
+                    });
+                } catch (error) {
+                    console.error('Error en corte automático:', error);
+                }
+            }
+            
             currentSession = null;
             localStorage.removeItem('cajaSession');
             showLoginScreen();
@@ -359,7 +386,8 @@
             const data = { 
                 message: message,
                 user_id: currentSession.user_id,
-                username: currentSession.username
+                username: currentSession.username,
+                session_id: currentSession.session_id
             };
 
             try {
@@ -497,7 +525,14 @@
 
             document.getElementById('btnInternet').addEventListener('click', () => handleNewAction('internet'));
             document.getElementById('btnPagos').addEventListener('click', () => handleNewAction('pagos'));
-            document.getElementById('btnReportes').addEventListener('click', () => handleNewAction('reportes'));
+            document.getElementById('btnReportes').addEventListener('click', () => {
+                // Verificar si el usuario es admin antes de abrir reportes
+                if (currentSession && currentSession.role === 'admin') {
+                    window.open('dashboard-ventas.html', '_blank');
+                } else {
+                    alert('Solo los administradores pueden acceder a los reportes.');
+                }
+            });
         });
     </script>
 </body>
